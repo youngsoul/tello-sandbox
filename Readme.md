@@ -13,3 +13,7 @@ The Python API I am using is:
 
 `https://github.com/damiafuentes/DJITelloPy`
 
+## Resources
+
+https://www.murtazahassan.com/programming-drone-to-follow-object/
+
