@@ -6,31 +6,48 @@ import signal
 import sys
 import imutils
 from threading import Thread
+import time
+from datetime import datetime
+
 
 tello = Tello()
 run_pid = True
-track_face = False  # True - cause the Tello to start to track/follow a face
+track_face = True  # True - cause the Tello to start to track/follow a face
 
 max_speed_threshold = 40
 
+video = None
 
 # function to handle keyboard interrupt
 def signal_handler(sig, frame):
+    print("Signal Handler")
     tello.streamoff()
+    tello.land()
+    if video:
+        video.release()
+
     sys.exit()
 
 
 def track_face_in_video_feed():
+    global video
     face_center = ObjCenter("./haarcascade_frontalface_default.xml")
     pan_pid = PID(kP=0.7, kI=0.0001, kD=0.09)
     tilt_pid = PID(kP=0.7, kI=0.0001, kD=0.09)
-    frame_read = tello.get_frame_read()
+    pan_pid.initialize()
+    tilt_pid.initialize()
+
 
     while True:
         frame = frame_read.frame
 
         frame = imutils.resize(frame, width=400)
         H, W, _ = frame.shape
+
+        if video is None:
+            video_file = f"video_{datetime.now().strftime('%d-%m-%Y_%I-%M-%S_%p')}.avi"
+
+            video = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'XVID'), 30, (W, H))
 
         # calculate the center of the frame as this is (ideally) where
         # we will we wish to keep the object
@@ -88,13 +105,16 @@ def track_face_in_video_feed():
                 elif tilt_update < -max_speed_threshold:
                     tilt_update = -max_speed_threshold
 
-                print(pan_update, tilt_update)
+                # print(int(pan_update), int(tilt_update))
                 if track_face:
-                    tello.send_rc_control(pan_update, 0, tilt_update, 0)
+                    tello.send_rc_control(0, 0, tilt_update//2, 0)
+        video.write(frame)
+        time.sleep(1 / 30)
+
 
         # display the frame to the screen
-        cv2.imshow("Face Tracking", frame)
-        cv2.waitKey(1)
+        # cv2.imshow("Face Tracking", frame)
+        # cv2.waitKey(1)
 
 
 if __name__ == '__main__':
@@ -103,12 +123,14 @@ if __name__ == '__main__':
     tello.connect()
 
     tello.streamon()
+    frame_read = tello.get_frame_read()
 
     face_thread = Thread(target=track_face_in_video_feed)
     face_thread.start()
+    time.sleep(1)
 
     tello.takeoff()
-    tello.move_up(100)
+    tello.move_up(70)
 
     cmd = input("Press q to land: ")
     if cmd == 'q':

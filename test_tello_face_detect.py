@@ -19,6 +19,7 @@ tello = Tello()
 # function to handle keyboard interrupt
 def signal_handler(sig, frame):
     tello.streamoff()
+    tello.land()
     sys.exit()
 
 
@@ -57,11 +58,11 @@ while True:
     # find the object's location
     frame_center = (centerX, centerY)
     objectLoc = face_center.update(frame, frameCenter=None)
-    print(centerX, centerY, objectLoc)
+    # print(centerX, centerY, objectLoc)
 
     ((objX, objY), rect, d) = objectLoc
     if d > 50:
-        print(f"SKIP SAMPLE: {d}")
+        # print(f"SKIP SAMPLE: {d}")
         continue  # ignore the sample as it is too far from the previous sample
         # trying to reduce gitter
 
