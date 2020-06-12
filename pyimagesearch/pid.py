@@ -8,6 +8,10 @@ class PID:
 		self.kI = kI
 		self.kD = kD
 
+		self.cP = 0
+		self.cI = 0
+		self.cD = 0
+
 	def initialize(self):
 		# initialize the current and previous time
 		self.currTime = time.time()

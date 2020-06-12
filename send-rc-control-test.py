@@ -1,6 +1,12 @@
 from djitellopy import Tello
 import time
 
+"""
+This script use the `send_rc_control` method to change the speed instead of the other methods that
+move the drone a particular distance.
+
+The 
+"""
 speed = 10
 
 up_down_speed = 0
@@ -31,7 +37,7 @@ if __name__ == '__main__':
         print("3 - LEFT")
         print("4 - RIGHT")
         print("5 - Battery")
-        print("6 - Stop")
+        print("6 - Stop (set speed to 0)")
         print("7 - +10 to speed")
         print("8 - -10 to speed")
         print("9 - Land")
@@ -52,7 +58,7 @@ if __name__ == '__main__':
         elif cmd == 2:
             set_speeds(-speed, 0)
         elif cmd == 5:
-            print(f"Battery Life Pecentage: {tello.get_battery()}")
+            print(f"Battery Life Percentage: {tello.get_battery()}")
         elif cmd == 6:
             set_speeds(0, 0)
         elif cmd == 7:
