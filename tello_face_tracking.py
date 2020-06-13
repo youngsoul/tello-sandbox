@@ -9,9 +9,9 @@ import time
 from datetime import datetime
 from multiprocessing import Manager, Process, Pipe, Event
 
-
 tello = None
 video_writer = None
+
 
 # function to handle keyboard interrupt
 def signal_handler(sig, frame):
@@ -32,7 +32,27 @@ def signal_handler(sig, frame):
     sys.exit()
 
 
-def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run_pid, track_face, fly=False, max_speed_limit=40):
+def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run_pid, track_face, fly=False,
+                             max_speed_limit=40):
+    """
+
+    :param exit_event: Multiprocessing Event.  When set, this event indicates that the process should stop.
+    :type exit_event:
+    :param show_video_conn: Pipe to send video frames to the process that will show the video
+    :type show_video_conn: multiprocessing Pipe
+    :param video_writer_conn: Pipe to send video frames to the process that will save the video frames
+    :type video_writer_conn: multiprocessing Pipe
+    :param run_pid: Flag to indicate whether the PID controllers should be run.
+    :type run_pid: bool
+    :param track_face: Flag to indicate whether face tracking should be used to move the drone
+    :type track_face: bool
+    :param fly: Flag used to indicate whether the drone should fly.  False is useful when you just want see the video stream.
+    :type fly: bool
+    :param max_speed_limit: Maximum speed that the drone will send as a command.
+    :type max_speed_limit: int
+    :return: None
+    :rtype:
+    """
     global tello
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
@@ -78,8 +98,9 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
         ((objX, objY), rect, d) = objectLoc
         if d > 25 or d == -1:
             # then either we got a false face, or we have no faces.
-            # either way stay put
-            # print(f"SKIP SAMPLE: {d}")
+            # the d - distance - value is used to keep the jitter down of false positive faces detected where there
+            #                   were none.
+            # if it is a false positive, or we cannot determine a distance, just stay put
             # print(int(pan_update), int(tilt_update))
             if track_face and fly:
                 tello.send_rc_control(0, 0, 0, 0)
@@ -129,13 +150,14 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
                 print(int(pan_update), int(tilt_update))
                 if track_face and fly:
                     # left/right: -100/100
-                    tello.send_rc_control(pan_update//3, 0, tilt_update//2, 0)
+                    tello.send_rc_control(pan_update // 3, 0, tilt_update // 2, 0)
 
         # send frame to other processes
         show_video_conn.send(frame)
         video_writer_conn.send(frame)
     # then we got the exit event so cleanup
-    signal_handler(None,None)
+    signal_handler(None, None)
+
 
 def show_video(exit_event, pipe_conn):
     signal.signal(signal.SIGINT, signal_handler)
@@ -148,6 +170,7 @@ def show_video(exit_event, pipe_conn):
         cv2.waitKey(1)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             exit_event.set()
+
 
 def video_recorder(pipe_conn, save_video, height=300, width=400):
     # create a VideoWrite object, recoring to ./video.avi
@@ -165,7 +188,7 @@ def video_recorder(pipe_conn, save_video, height=300, width=400):
         time.sleep(1 / 30)
 
     # then we got the exit event so cleanup
-    signal_handler(None,None)
+    signal_handler(None, None)
 
 
 if __name__ == '__main__':
@@ -182,7 +205,8 @@ if __name__ == '__main__':
     exit_event = Event()
 
     with Manager() as manager:
-        p1 = Process(target=track_face_in_video_feed, args=(exit_event, child_conn, child2_conn, run_pid, track_face, fly,))
+        p1 = Process(target=track_face_in_video_feed,
+                     args=(exit_event, child_conn, child2_conn, run_pid, track_face, fly,))
         p2 = Process(target=show_video, args=(exit_event, parent_conn,))
         p3 = Process(target=video_recorder, args=(parent2_conn, save_video,))
         p2.start()
@@ -194,6 +218,5 @@ if __name__ == '__main__':
         p3.terminate()
         p2.join()
         p3.join()
-
 
     print("Complete...")
