@@ -222,6 +222,7 @@ if __name__ == '__main__':
     ap.add_argument("--save-video", type=int, required=False, default=1, help="Save video as MP4 file.  Default: 1")
     ap.add_argument("--fly", type=int, required=False, default=0, help="Flag to control whether the drone should take flight. You also need to 'track-face' for the drone to follow the face.  Default: 0")
     ap.add_argument("--track-face", type=int, required=False, default=0, help="Flag to control whether Face detection should be used to control the drone.  Default: 0")
+    ap.add_argument("--max-speed", type=int, required=False, default=40, help="0-100 value")
 
     args = vars(ap.parse_args())
 
@@ -231,6 +232,8 @@ if __name__ == '__main__':
     print(f"Fly: {fly}")
     fly = False
     display_video = True if args['display_video'] == 1 else False
+    max_speed = args['max_speed']
+
 
     display_video_queue = None
     if display_video:
@@ -244,7 +247,7 @@ if __name__ == '__main__':
 
     with Manager() as manager:
         p1 = Process(target=track_face_in_video_feed,
-                     args=(exit_event, display_video_queue, save_video_queue, track_face, fly,))
+                     args=(exit_event, display_video_queue, save_video_queue, track_face, fly,max_speed,))
 
         if display_video:
             p2 = Process(target=show_video, args=(exit_event, display_video_queue,))
