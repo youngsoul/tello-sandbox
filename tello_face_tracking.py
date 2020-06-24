@@ -8,6 +8,7 @@ import imutils
 import time
 from datetime import datetime
 from multiprocessing import Manager, Process, Pipe, Event
+import argparse
 
 tello = None
 video_writer = None
@@ -32,7 +33,7 @@ def signal_handler(sig, frame):
     sys.exit()
 
 
-def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run_pid, track_face, fly=False,
+def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, track_face, fly=False,
                              max_speed_limit=40):
     """
 
@@ -42,8 +43,6 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
     :type show_video_conn: multiprocessing Pipe
     :param video_writer_conn: Pipe to send video frames to the process that will save the video frames
     :type video_writer_conn: multiprocessing Pipe
-    :param run_pid: Flag to indicate whether the PID controllers should be run.
-    :type run_pid: bool
     :param track_face: Flag to indicate whether face tracking should be used to move the drone
     :type track_face: bool
     :param fly: Flag used to indicate whether the drone should fly.  False is useful when you just want see the video stream.
@@ -64,6 +63,7 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
     tello.connect()
 
     tello.streamon()
+    time.sleep(0.1)
     frame_read = tello.get_frame_read()
 
     if fly:
@@ -78,6 +78,11 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
 
     while not exit_event.is_set():
         frame = frame_read.frame
+        if frame is None:
+            print("Failed to read video frame")
+            tello.send_rc_control(0, 0, 0, 0)
+            time.sleep(0.5)
+            continue
 
         frame = imutils.resize(frame, width=400)
         H, W, _ = frame.shape
@@ -104,6 +109,14 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
             # print(int(pan_update), int(tilt_update))
             if track_face and fly:
                 tello.send_rc_control(0, 0, 0, 0)
+
+            # send frame to other processes
+            if show_video_conn:
+                show_video_conn.send(frame)
+
+            if video_writer_conn:
+                video_writer_conn.send(frame)
+
             continue  # ignore the sample as it is too far from the previous sample
 
         if rect is not None:
@@ -117,44 +130,47 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, run
             # Draw line from frameCenter to face center
             cv2.arrowedLine(frame, frame_center, (objX, objY), color=(0, 255, 0), thickness=2)
 
-            if run_pid:
-                # calculate the pan and tilt errors and run through pid controllers
-                pan_error = centerX - objX
-                pan_update = pan_pid.update(pan_error, sleep=0)
+            # calculate the pan and tilt errors and run through pid controllers
+            pan_error = centerX - objX
+            pan_update = pan_pid.update(pan_error, sleep=0)
 
-                tilt_error = centerY - objY
-                tilt_update = tilt_pid.update(tilt_error, sleep=0)
+            tilt_error = centerY - objY
+            tilt_update = tilt_pid.update(tilt_error, sleep=0)
 
-                # print(pan_error, int(pan_update), tilt_error, int(tilt_update))
-                cv2.putText(frame, f"X Error: {pan_error} PID: {pan_update:.2f}", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                            (0, 255, 0), 2, cv2.LINE_AA)
+            # print(pan_error, int(pan_update), tilt_error, int(tilt_update))
+            cv2.putText(frame, f"X Error: {pan_error} PID: {pan_update:.2f}", (20, 30), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                        (0, 255, 0), 2, cv2.LINE_AA)
 
-                cv2.putText(frame, f"Y Error: {tilt_error} PID: {tilt_update:.2f}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX,
-                            1,
-                            (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.putText(frame, f"Y Error: {tilt_error} PID: {tilt_update:.2f}", (20, 70), cv2.FONT_HERSHEY_SIMPLEX,
+                        1,
+                        (0, 0, 255), 2, cv2.LINE_AA)
 
-                if pan_update > max_speed_threshold:
-                    pan_update = max_speed_threshold
-                elif pan_update < -max_speed_threshold:
-                    pan_update = -max_speed_threshold
+            if pan_update > max_speed_threshold:
+                pan_update = max_speed_threshold
+            elif pan_update < -max_speed_threshold:
+                pan_update = -max_speed_threshold
 
-                # NOTE: if face is to the right of the drone, the distance will be negative, but
-                # the drone has to have positive power so I am flipping the sign
-                pan_update = pan_update * -1
+            # NOTE: if face is to the right of the drone, the distance will be negative, but
+            # the drone has to have positive power so I am flipping the sign
+            pan_update = pan_update * -1
 
-                if tilt_update > max_speed_threshold:
-                    tilt_update = max_speed_threshold
-                elif tilt_update < -max_speed_threshold:
-                    tilt_update = -max_speed_threshold
+            if tilt_update > max_speed_threshold:
+                tilt_update = max_speed_threshold
+            elif tilt_update < -max_speed_threshold:
+                tilt_update = -max_speed_threshold
 
-                print(int(pan_update), int(tilt_update))
-                if track_face and fly:
-                    # left/right: -100/100
-                    tello.send_rc_control(pan_update // 3, 0, tilt_update // 2, 0)
+            # print(int(pan_update), int(tilt_update))
+            if track_face and fly:
+                # left/right: -100/100
+                tello.send_rc_control(pan_update // 3, 0, tilt_update // 2, 0)
 
         # send frame to other processes
-        show_video_conn.send(frame)
-        video_writer_conn.send(frame)
+        if show_video_conn:
+            show_video_conn.send(frame)
+
+        if video_writer_conn:
+            video_writer_conn.send(frame)
+
     # then we got the exit event so cleanup
     signal_handler(None, None)
 
@@ -163,24 +179,26 @@ def show_video(exit_event, pipe_conn):
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
+    print("Start Show Video Process")
+
     while True:
         frame = pipe_conn.recv()
         # display the frame to the screen
         cv2.imshow("Drone Face Tracking", frame)
-        cv2.waitKey(1)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             exit_event.set()
 
-
-def video_recorder(pipe_conn, save_video, height=300, width=400):
+def video_recorder(pipe_conn, height=300, width=400):
     global video_writer
     # create a VideoWrite object, recoring to ./video.avi
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    if video_writer is None and save_video == True:
+    print("Start Video Recorder")
+
+    if video_writer is None:
         video_file = f"video_{datetime.now().strftime('%d-%m-%Y_%I-%M-%S_%p')}.mp4"
-        video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'MP4V'), 30, (width, height))
+        video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), 30, (width, height))
 
     while True:
         frame = pipe_conn.recv()
@@ -194,29 +212,69 @@ def video_recorder(pipe_conn, save_video, height=300, width=400):
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    run_pid = True
-    track_face = True  # True - cause the Tello to start to track/follow a face
-    save_video = True
-    fly = True
 
-    parent_conn, child_conn = Pipe()
-    parent2_conn, child2_conn = Pipe()
+    print("****************")
+    print("execute: export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES")
+    print("****************")
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--display-video", type=int, required=False, default=1,  help="Display Drone video using OpenCV.  Default: 1")
+    ap.add_argument("--save-video", type=int, required=False, default=1, help="Save video as MP4 file.  Default: 1")
+    ap.add_argument("--fly", type=int, required=False, default=0, help="Flag to control whether the drone should take flight. You also need to 'track-face' for the drone to follow the face.  Default: 0")
+    ap.add_argument("--track-face", type=int, required=False, default=0, help="Flag to control whether Face detection should be used to control the drone.  Default: 0")
+
+    args = vars(ap.parse_args())
+
+    track_face = True if args['track_face'] == 1 else False
+    save_video = True if args['save_video'] == 1 else False
+    fly = True if args['fly'] == 1 else False
+    print(f"Fly: {fly}")
+    fly = False
+    display_video = True if args['display_video'] == 1 else False
+
+    parent_display_video = child_display_video = None
+    if display_video:
+        parent_display_video, child_display_video = Pipe()
+
+    parent_save_video = child_save_video = None
+    if save_video:
+        parent_save_video, child_save_video = Pipe()
 
     exit_event = Event()
 
     with Manager() as manager:
         p1 = Process(target=track_face_in_video_feed,
-                     args=(exit_event, child_conn, child2_conn, run_pid, track_face, fly,))
-        p2 = Process(target=show_video, args=(exit_event, parent_conn,))
-        p3 = Process(target=video_recorder, args=(parent2_conn, save_video,))
-        p2.start()
-        p3.start()
+                     args=(exit_event, child_display_video, child_save_video, track_face, fly,))
+
+        if display_video:
+            p2 = Process(target=show_video, args=(exit_event, parent_display_video,))
+        else:
+            p2 = None
+
+        if save_video:
+            p3 = Process(target=video_recorder, args=(parent_save_video,))
+        else:
+            p3 = None
+
+        if p2:
+            p2.start()
+
+        if p3:
+            p3.start()
+
         p1.start()
 
         p1.join()
-        p2.terminate()
-        p3.terminate()
-        p2.join()
-        p3.join()
+        if p2:
+            p2.terminate()
+
+        if p3:
+            p3.terminate()
+
+        if p2:
+            p2.join()
+
+        if p3:
+            p3.join()
 
     print("Complete...")
