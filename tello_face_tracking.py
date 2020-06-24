@@ -7,7 +7,7 @@ import sys
 import imutils
 import time
 from datetime import datetime
-from multiprocessing import Manager, Process, Pipe, Event
+from multiprocessing import Manager, Process, Pipe, Event, Queue
 import argparse
 
 tello = None
@@ -112,10 +112,10 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, tra
 
             # send frame to other processes
             if show_video_conn:
-                show_video_conn.send(frame)
+                show_video_conn.put(frame)
 
             if video_writer_conn:
-                video_writer_conn.send(frame)
+                video_writer_conn.put(frame)
 
             continue  # ignore the sample as it is too far from the previous sample
 
@@ -166,10 +166,10 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, tra
 
         # send frame to other processes
         if show_video_conn:
-            show_video_conn.send(frame)
+            show_video_conn.put(frame)
 
         if video_writer_conn:
-            video_writer_conn.send(frame)
+            video_writer_conn.put(frame)
 
     # then we got the exit event so cleanup
     signal_handler(None, None)
@@ -182,7 +182,7 @@ def show_video(exit_event, pipe_conn):
     print("Start Show Video Process")
 
     while True:
-        frame = pipe_conn.recv()
+        frame = pipe_conn.get()
         # display the frame to the screen
         cv2.imshow("Drone Face Tracking", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -201,7 +201,7 @@ def video_recorder(pipe_conn, height=300, width=400):
         video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), 30, (width, height))
 
     while True:
-        frame = pipe_conn.recv()
+        frame = pipe_conn.get()
         video_writer.write(frame)
         time.sleep(1 / 30)
 
@@ -232,27 +232,27 @@ if __name__ == '__main__':
     fly = False
     display_video = True if args['display_video'] == 1 else False
 
-    parent_display_video = child_display_video = None
+    display_video_queue = None
     if display_video:
-        parent_display_video, child_display_video = Pipe()
+        display_video_queue = Queue()
 
-    parent_save_video = child_save_video = None
+    save_video_queue = None
     if save_video:
-        parent_save_video, child_save_video = Pipe()
+        save_video_queue = Queue()
 
     exit_event = Event()
 
     with Manager() as manager:
         p1 = Process(target=track_face_in_video_feed,
-                     args=(exit_event, child_display_video, child_save_video, track_face, fly,))
+                     args=(exit_event, display_video_queue, save_video_queue, track_face, fly,))
 
         if display_video:
-            p2 = Process(target=show_video, args=(exit_event, parent_display_video,))
+            p2 = Process(target=show_video, args=(exit_event, display_video_queue,))
         else:
             p2 = None
 
         if save_video:
-            p3 = Process(target=video_recorder, args=(parent_save_video,))
+            p3 = Process(target=video_recorder, args=(save_video_queue,))
         else:
             p3 = None
 
