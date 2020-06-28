@@ -9,8 +9,10 @@ import time
 
 # IP and port of Tello
 tello_ip = '192.168.10.1'
+tello_port = 8889
 local_ip = '192.168.1.208'
-tello_address = (local_ip, 8888)
+local_port = 8888
+tello_address = (local_ip, local_port)
 
 # IP and port of local computer
 local_address = ('', 9000)
