@@ -309,22 +309,24 @@ def simulate_tello(src, error_rate, no_rsp_rate):
             command_response_table.add_row([cmd_data, rsp_data])
 
 
-def udp_proxy(src, dst):
+def tello_proxy(src, dst):
     global proxy_socket
-    """Run UDP proxy.
+    """Run Tello proxy.
 
     Arguments:
     src -- Source IP address and port string. I.e.: '127.0.0.1:8000'
+            The source is application that is issuing Tello Commands
+            
     dst -- Destination IP address and port. I.e.: '127.0.0.1:8888'
+            The destination is the Tello drone
     """
-    LOGGER.debug('Starting UDP proxy...')
+    LOGGER.debug('Starting Tello proxy...')
     LOGGER.debug('Src: {}'.format(src))
     LOGGER.debug('Dst: {}'.format(dst))
 
     proxy_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     proxy_socket.bind(ip_to_tuple(src))
 
-    client_address = None
     server_address = ip_to_tuple(dst) if dst is not None else None
 
     LOGGER.debug('Looping proxy (press Ctrl-Break to stop)...')
@@ -345,7 +347,7 @@ def udp_proxy(src, dst):
             command_response_table.add_row([cmd_data, rsp_data])
 
 
-# end-of-function udp_proxy
+# end-of-function tello_proxy
 
 
 def ip_to_tuple(ip):
@@ -406,7 +408,7 @@ def main():
     if args.proxy:
         if args.dst is None:
             raise ValueError("If UDP Proxy, destination IP and Port cannot be empty")
-        udp_proxy(args.src, args.dst)
+        tello_proxy(args.src, args.dst)
     elif args.sim:
         simulate_tello(args.src, args.sim_error_rate, args.sim_no_response_rate)
 
