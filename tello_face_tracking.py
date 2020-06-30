@@ -164,6 +164,13 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, tra
             if track_face and fly:
                 # left/right: -100/100
                 tello.send_rc_control(pan_update // 3, 0, tilt_update // 2, 0)
+            elif fly:
+                # then we are not tracking the face, but we are flying
+                # so send tello a command of 'stay where you are' but this
+                # will keep the tello flying.  otherwise after a timeout
+                # of no commands it lands
+                tello.send_rc_control(0, 0, 0, 0)
+
 
         # send frame to other processes
         if show_video_conn:
