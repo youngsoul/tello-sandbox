@@ -60,10 +60,11 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, tra
 
     tello = Tello()
 
-    tello.connect()
+    rtn = tello.connect()
+    print(f"Connect Return: {rtn}")
 
     tello.streamon()
-    time.sleep(0.1)
+    time.sleep(2)
     frame_read = tello.get_frame_read()
 
     if fly:
@@ -175,20 +176,20 @@ def track_face_in_video_feed(exit_event, show_video_conn, video_writer_conn, tra
     signal_handler(None, None)
 
 
-def show_video(exit_event, pipe_conn):
+def show_video(exit_event, frame_queue):
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("Start Show Video Process")
 
     while True:
-        frame = pipe_conn.get()
+        frame = frame_queue.get()
         # display the frame to the screen
         cv2.imshow("Drone Face Tracking", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             exit_event.set()
 
-def video_recorder(pipe_conn, height=300, width=400):
+def video_recorder(frame_queue, height=300, width=400):
     global video_writer
     # create a VideoWrite object, recoring to ./video.avi
     signal.signal(signal.SIGINT, signal_handler)
@@ -201,7 +202,7 @@ def video_recorder(pipe_conn, height=300, width=400):
         video_writer = cv2.VideoWriter(video_file, cv2.VideoWriter_fourcc(*'mp4v'), 30, (width, height))
 
     while True:
-        frame = pipe_conn.get()
+        frame = frame_queue.get()
         video_writer.write(frame)
         time.sleep(1 / 30)
 
@@ -214,7 +215,7 @@ if __name__ == '__main__':
     signal.signal(signal.SIGTERM, signal_handler)
 
     print("****************")
-    print("execute: export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES")
+    print("execute: export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES  ")
     print("****************")
 
     ap = argparse.ArgumentParser()
@@ -230,7 +231,6 @@ if __name__ == '__main__':
     save_video = True if args['save_video'] == 1 else False
     fly = True if args['fly'] == 1 else False
     print(f"Fly: {fly}")
-    fly = False
     display_video = True if args['display_video'] == 1 else False
     max_speed = args['max_speed']
 

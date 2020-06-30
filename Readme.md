@@ -53,3 +53,12 @@ This script starts up 3 processes to handle:
 * Display Video.  This process will show the frames from the Tello Drone using OpenCV.  This process will also look for the 'q' command to quit the program and land the drone.  
 
 
+## Target Locating
+
+use this blog:
+
+https://www.pyimagesearch.com/2015/05/04/target-acquired-finding-targets-in-drone-and-quadcopter-video-streams-using-python-and-opencv/
+
+with the Droneblocks logo as the target
+
+
