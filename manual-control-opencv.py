@@ -19,7 +19,7 @@ tello.takeoff()
 while True:
     # In reality you want to display frames in a seperate thread. Otherwise
     #  they will freeze while the drone moves.
-    img = frame_read.framew
+    img = frame_read.frame
     cv2.imshow("drone", img)
 
     key = cv2.waitKey(1) & 0xff
@@ -44,3 +44,4 @@ while True:
 
 tello.land()
 tello.streamoff()
+cv2.destroyAllWindows()
